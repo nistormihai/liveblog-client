@@ -34,9 +34,17 @@
 
     <!-- build:js scripts/superdesk.js -->
     <script src="scripts/bower_components/superdesk/app/scripts/superdesk/editor/editor.js"></script>
+    <script src="scripts/bower_components/superdesk/app/scripts/superdesk/features/features.js"></script>
+
     <script src="scripts/bower_components/superdesk/app/scripts/superdesk/menu/menu.js"></script>
     <script src="scripts/bower_components/superdesk/app/scripts/superdesk/menu/notifications/notifications.js"></script>
+
     <script src="scripts/bower_components/superdesk/app/scripts/superdesk-workspace/content/content.js"></script>
+    <script src="scripts/bower_components/superdesk/app/scripts/superdesk-dashboard/workspace-tasks/tasks.js"></script>
+
+    <script src="scripts/bower_components/superdesk/app/scripts/superdesk-users/users.js"></script>
+    <script src="scripts/bower_components/superdesk/app/scripts/superdesk-users/profile.js"></script>
+    <script src="scripts/bower_components/superdesk/app/scripts/superdesk-users/activity/activity.js"></script>    
     <!-- endbuild -->
 
     <!-- build:js scripts/config.js -->
@@ -54,6 +62,7 @@
         };
         var modules = [
             'superdesk.settings',
+            'superdesk.dashboard',
             'liveblog.dashboard',
             'liveblog.bloglist',
             'superdesk.users',
@@ -63,9 +72,9 @@
         require([
             'main',
             'superdesk-settings/module',
+            'superdesk-dashboard/module',
             'liveblog-dashboard/module',
             'liveblog-bloglist/module',
-            'superdesk-users/module',
             'superdesk-scratchpad/module'
         ], function(bootstrap) {
             bootstrap(config, modules);
