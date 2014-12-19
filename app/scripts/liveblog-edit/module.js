@@ -1,12 +1,12 @@
 define([
     'angular',
+    'ng-sir-trevor',
     'ng-sir-trevor-blocks'
 ], function(angular) {
     'use strict';
 
-    BlogEditController.$inject = ['api', '$scope', 'blog', 'notify', 'gettext', '$route'];
-    function BlogEditController(api, $scope, blog, notify, gettext, $route) {
-        $scope.editor = {};
+    BlogEditController.$inject = ['api', '$scope', 'blog', 'notify', 'gettext', '$route', 'upload', 'config'];
+    function BlogEditController(api, $scope, blog, notify, gettext, $route, upload, config) {
         $scope.blog = blog;
         $scope.oldBlog = _.create(blog);
         $scope.updateBlog = function(blog) {
@@ -27,7 +27,7 @@ define([
             $scope.create().then(function() {
                 notify.pop();
                 notify.info(gettext('Post saved'));
-                $scope.editor.clear();
+                $scope.editor.reinitialize();
             }, function() {
                 notify.pop();
                 notify.error(gettext('Something went wrong. Please try again later'));
@@ -43,20 +43,49 @@ define([
             return dfd;
         };
 
-        $scope.$watch('blog.state', function() {
+        $scope.$watch('blog.blog_status', function() {
             //the text on the open/close button
-            $scope.toggleStateText = $scope.blog.state === 'open' ? gettext('Archive Blog'): gettext('Activate Blog');
-            $scope.disableInterfaceSwitch = $scope.blog.state === 'open' ? false: true;
+            $scope.toggleStateText = $scope.blog.blog_status === 'open' ? gettext('Archive Blog'): gettext('Activate Blog');
+            $scope.disableInterfaceSwitch = $scope.blog.blog_status === 'open' ? false: true;
         });
 
         $scope.toggleBlogState = function() {
-            var newStateValue = $scope.blog.state === 'open' ? 'closed': 'open';
-            api.blogs.save($scope.blog, {'state': newStateValue})
+            var newStateValue = $scope.blog.blog_status === 'open' ? 'closed': 'open';
+            api.blogs.save($scope.blog, {'blog_status': newStateValue})
             .then(function() {
-                $scope.blog.state = newStateValue;
+                $scope.blog.blog_status = newStateValue;
             }, function(response) {
                 notify.error(gettext('Something went wrong. Please try again later'));
             });
+        };
+
+        $scope.stParams = {
+            // provide an uploader to the editor for media (custom sir-trevor image block uses it)
+            uploader: function(file, success_callback, error_callback) {
+                var handleError = error_callback;
+                // return a promise of upload which will call the success/error callback
+                return api.upload.getUrl().then(function(url) {
+                    upload.start({
+                        method: 'POST',
+                        url: url,
+                        data: {media: file}
+                    })
+                    .then(function(response) {
+                        if (response.data._issues) {
+                            return handleError(response);
+                        }
+                        // used in `SirTrevor.Blocks.Image` to fill in the block content.
+                        var media_meta = {
+                            _info: config.server.url + response.data._links.self.href,
+                            _id: response.data._id,
+                            _url: response.data.renditions.viewImage.href
+                        };
+                        // media will be added latter in the `meta` if this item in this callback
+                        success_callback({media: media_meta});
+                    }, handleError, function(progress) {
+                    });
+                });
+            }
         };
     }
 
@@ -90,15 +119,44 @@ define([
             type: 'http',
             backend: {rel: 'posts'}
         });
-    }]).config(['SirTrevorOptionsProvider', function(SirTrevorOptions) {
+        apiProvider.api('upload', {
+            type: 'http',
+            backend: {rel: 'upload'}
+        });
+    }]).config(['SirTrevorOptionsProvider', 'SirTrevorProvider', function(SirTrevorOptions, SirTrevor) {
+        // here comes all the sir trevor customization (except custom blocks which are in the SirTrevorBlocks module)
+        SirTrevor = SirTrevor.$get();
+        // change the remove trash icon by a cross
+        SirTrevor.BlockDeletion.prototype.attributes['data-icon'] = 'close';
+        // extends the options given as parameter to the editor contructor
         SirTrevorOptions.$extend({
-            blockTypes: ['Text', 'Quote'],
+            onEditorRender: function() {
+                var editor = this;
+                var editor_nui = $(editor.$wrapper);
+                var showFirstBlockControls = function() {editor.showBlockControls(editor_nui.find('.st-block-controls__top'));};
+                // when the editor is instantiated, shows the block types instead of the "+",
+                showFirstBlockControls();
+                // even when we come back to the initial state, where every blocks were removed
+                SirTrevor.EventBus.on('block:remove', function() {
+                    if (editor_nui.find('.st-block').length <= 0) {
+                        showFirstBlockControls();
+                    }
+                });
+                // and unbind the behavior which closes everything on outside mouse click
+                $(window).unbind('click', editor.hideAllTheThings);
+                // add the bootstrap classes to the block types bar buttons
+                editor_nui.find('.st-block-control').addClass('btn btn-default');
+            },
+            blockTypes: ['Text', 'Image', 'Quote'],
+            // render a default block when the editor is loaded
+            // Note: Disable to let the user understand what a "Text" block is. Stay here in case we change our mind
+            // defaultType: 'Text',
             transform: {
                 get: function(block) {
                     return {
                         type: block.blockStorage.type,
-                        text: block.toHTML()
-                        //,meta: block.toMeta()
+                        text: block.toHTML(),
+                        meta: block.toMeta()
                     };
                 },
                 set: function(block) {
